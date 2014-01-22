@@ -1,0 +1,116 @@
+from platform import system
+from os import listdir
+from collections import OrderedDict
+
+is_debug = True;
+suffix = ""
+if(is_debug):
+    suffix = "d"
+    print("DEBUG")
+else:
+    print("RELEASE")
+print("System is "+ system());
+
+def validateLibrary(libraryName):
+    """ Search in the libpath of the current platform if the library is present """
+    for folder in libpath[system()]:
+        for file in listdir(folder):
+            if (libraryName + "." in file):
+                return True
+    return False
+
+cpppath = {
+    "Linux": [], #[r"/path/1", r"/path/2"]
+    "Windows": [],
+    "Darwin": []
+    }
+        
+libpath = {
+    "Linux": [], #[r"/path/1", r"/path/2"]
+    "Windows": [],
+    "Darwin": []
+    }
+
+cppdefines = []
+if (system() == "Windows"):
+   cppdefines.append("WIN64")
+elif (system() == "Linux"):
+   cppdefines.append("Linux")
+elif (system() == "Darwin"):
+   cppdefines.append("Darwin")
+
+libs = []
+
+# Validate that the libs are present
+moduleLibs = {} # { "Module1": { "Linux": ["linuxlibname1"], "Windows": ["winlibname1"], "Darwin": ["osxlibname1"] }, "Module2": { "Linux": ["linuxlibname2"], "Windows": ["winlibname2"], """: ["osxlibname2"] } }
+
+missingModules = []
+
+for module in moduleLibs:
+    allModulePresents = True
+    for mod in moduleLibs[module][system()]:
+        if (not validateLibrary(mod)):
+            allLibPresents = False
+    if (allModulePresents):
+        libs += moduleLibs[module][system()];
+        cppdefines.append((module + "_MODULE").upper())
+    else:
+        missingModules.append(module)
+
+libs = list(OrderedDict.fromkeys(libs))
+
+# linux flags
+# -g : debug info flag
+# -O# : optimization flag
+# -m64 : force 64 bits in the linker
+# -Wall : enables all the warnings
+# -fmessage-length : format the compiler message
+# -std=c++11 : c++ version flag
+
+cxxflags = {
+    "Linux": "-g -O0 -m64 -Wall -pthread -fmessage-length=0 -std=c++11",
+    "Windows": "/O0 /MD /EHsc",
+    "Darwin": "-g -O0 -m64 -Wall -pthread -fmessage-length=0 -std=c++11",
+    }
+    
+# Create an environmnet
+env = Environment(TARGET_ARCH = "x86_64",
+    CPPPATH = cpppath[system()],
+    LIBPATH = libpath[system()],
+    LIBS = libs,
+    CXXFLAGS = cxxflags[system()],
+    CPPDEFINES = cppdefines
+    )
+
+# Change the build folder output
+#env.VariantDir("build-debug", "src", duplicate = 0)
+
+files = Glob("*.cpp")
+if (system() == "Windows"):
+    files += ["BaseLib.def"]
+    target = "BaseLib"+suffix
+elif (system() == "Linux"):
+    target = "BaseLib"+suffix
+elif (system() == "Darwin"):
+    target = "BaseLib"+suffix
+
+# Remove the cpp files for the missing solvers
+filesToRemove = []
+if (not env.GetOption("clean")):
+    for file in files:
+        for module in missingModules:
+            if module in str(file):
+                filesToRemove.append(file)
+
+for file in filesToRemove:
+    print(file)
+    files.remove(file)
+    
+# Build the library
+env.SharedLibrary(target = "../lib/" + target, source = files)
+
+if (missingModules):
+    print("***************************************************************************")
+    print("****** The following modules will not compiled into the final library *****")
+    print(missingModules)
+    print("***************************************************************************")
